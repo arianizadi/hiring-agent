@@ -93,8 +93,9 @@ class PDFHandler:
                 ],
                 "options": {
                     "stream": False,
-                    "temperature": model_params["temperature"],
-                    "top_p": model_params["top_p"],
+                    "temperature": model_params.get("temperature", 0.1),
+                    "top_p": model_params.get("top_p", 0.9),
+                    "reasoning_effort": model_params.get("reasoning_effort"),
                 },
             }
 

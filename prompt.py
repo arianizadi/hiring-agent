@@ -46,6 +46,10 @@ MODEL_PARAMETERS = {
     "gpt-4o-mini": {"temperature": 0.1, "top_p": 0.9},
     "gpt-4.1": {"temperature": 0.1, "top_p": 0.9},
     "gpt-4.1-mini": {"temperature": 0.1, "top_p": 0.9},
+    # OpenAI reasoning models: temperature/top_p are ignored by the provider;
+    # reasoning_effort drives them instead. temperature/top_p kept as harmless
+    # defaults so non-reasoning code paths (e.g. pdf.py) don't KeyError.
+    "gpt-5.5": {"reasoning_effort": "high", "temperature": 1, "top_p": 1.0},
 }
 
 # Model provider mapping
@@ -71,6 +75,7 @@ MODEL_PROVIDER_MAPPING = {
     "gpt-4o-mini": ModelProvider.OPENAI,
     "gpt-4.1": ModelProvider.OPENAI,
     "gpt-4.1-mini": ModelProvider.OPENAI,
+    "gpt-5.5": ModelProvider.OPENAI,
 }
 
 # Get API keys from environment

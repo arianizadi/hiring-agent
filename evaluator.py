@@ -69,6 +69,7 @@ class ResumeEvaluator:
                     "stream": False,
                     "temperature": self.model_params.get("temperature", 0.5),
                     "top_p": self.model_params.get("top_p", 0.9),
+                    "reasoning_effort": self.model_params.get("reasoning_effort"),
                 },
             }
 

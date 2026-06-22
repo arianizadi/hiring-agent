@@ -388,6 +388,12 @@ class OpenAIProvider:
     # so subclasses can disable it and rely on prompt-driven JSON instead.
     supports_json_mode = True
 
+    @staticmethod
+    def _is_reasoning_model(model: str) -> bool:
+        """True for OpenAI reasoning models (o-series, gpt-5 family)."""
+        name = (model or "").lower().split("/")[-1]  # drop any 'openai/' prefix
+        return name.startswith(("o1", "o3", "o4", "gpt-5"))
+
     def __init__(self, api_key: str, base_url: str = None):
         from openai import OpenAI
 
@@ -415,12 +421,17 @@ class OpenAIProvider:
             "messages": list(messages),
         }
 
-        # Sampling parameters (omitted for models that reject them is handled
-        # by the caller's model choice; gpt-4o-family accepts both).
-        if "temperature" in options:
-            params["temperature"] = options["temperature"]
-        if "top_p" in options:
-            params["top_p"] = options["top_p"]
+        if self._is_reasoning_model(model):
+            # Reasoning models (o-series, gpt-5*) reject custom temperature/top_p
+            # and are tuned via reasoning_effort instead.
+            effort = options.get("reasoning_effort")
+            if effort:
+                params["reasoning_effort"] = effort
+        else:
+            if options.get("temperature") is not None:
+                params["temperature"] = options["temperature"]
+            if options.get("top_p") is not None:
+                params["top_p"] = options["top_p"]
 
         # Structured output. The downstream code validates against Pydantic
         # models itself, so JSON mode (guaranteed-valid JSON) is the robust
