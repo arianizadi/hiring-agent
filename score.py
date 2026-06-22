@@ -20,6 +20,37 @@ from config import DEVELOPMENT_MODE
 
 logger = logging.getLogger(__name__)
 
+
+def extract_pdf_hyperlinks(pdf_path: str) -> List[Dict[str, str]]:
+    """Extract embedded hyperlinks (anchor text + URL) from a resume PDF.
+
+    The per-section LLM extraction keeps anchor text but discards the underlying
+    URI, so contribution links (e.g. PR/MR links to external repos) are lost.
+    This recovers them so the evaluator can use them as evidence.
+    """
+    import fitz
+
+    links: List[Dict[str, str]] = []
+    seen = set()
+    try:
+        doc = fitz.open(pdf_path)
+        for page in doc:
+            for link in page.get_links():
+                uri = link.get("uri")
+                if not uri or uri in seen:
+                    continue
+                seen.add(uri)
+                try:
+                    anchor = page.get_textbox(link["from"]).replace("\n", " ").strip()
+                except Exception:
+                    anchor = ""
+                links.append({"text": anchor, "url": uri})
+        doc.close()
+    except Exception as e:
+        logger.warning(f"Could not extract PDF hyperlinks: {e}")
+    return links
+
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s - %(name)5s - %(lineno)5d - %(funcName)33s - %(levelname)5s - %(message)s",
@@ -156,11 +187,44 @@ def print_evaluation_results(
         for i, area in enumerate(evaluation.areas_for_improvement, 1):
             print(f"  {i}. {area}")
 
+    # Score Improvement Tips (actionable + points likely left on the table)
+    if (
+        hasattr(evaluation, "score_improvement_tips")
+        and evaluation.score_improvement_tips
+    ):
+        print(f"\n💡 HOW TO INCREASE YOUR SCORE:")
+        print("-" * 30)
+        for i, tip in enumerate(evaluation.score_improvement_tips, 1):
+            gain = f"  [{tip.potential_gain}]" if tip.potential_gain else ""
+            print(f"  {i}. {tip.area}{gain}")
+            print(f"     → {tip.suggestion}")
+
     print("\n" + "=" * 80)
 
 
+def _format_embedded_links(pdf_links: List[Dict[str, str]]) -> str:
+    """Render embedded PDF hyperlinks as an evidence block for the evaluator."""
+    if not pdf_links:
+        return ""
+    lines = [
+        "\n\n=== EMBEDDED RESUME LINKS (extracted from PDF hyperlinks) ===",
+        "These hyperlinks were embedded in the candidate's resume. Treat links to "
+        "pull/merge requests in EXTERNAL repositories (i.e. not owned by the "
+        "candidate) as direct evidence of open source contributions to those "
+        "projects. Anchor text -> URL:",
+    ]
+    for link in pdf_links:
+        text = link.get("text") or ""
+        url = link.get("url") or ""
+        lines.append(f"- {text} -> {url}")
+    return "\n".join(lines)
+
+
 def _evaluate_resume(
-    resume_data: JSONResume, github_data: dict = None, blog_data: dict = None
+    resume_data: JSONResume,
+    github_data: dict = None,
+    blog_data: dict = None,
+    pdf_links: List[Dict[str, str]] = None,
 ) -> Optional[EvaluationData]:
     """Evaluate the resume using AI and display results."""
 
@@ -169,6 +233,9 @@ def _evaluate_resume(
 
     # Convert JSON resume data to text
     resume_text = convert_json_resume_to_text(resume_data)
+
+    # Add embedded PDF hyperlinks (recovers PR/MR links dropped during extraction)
+    resume_text += _format_embedded_links(pdf_links)
 
     # Add GitHub data if available
     if github_data:
@@ -323,7 +390,12 @@ def main(pdf_path):
                     encoding="utf-8",
                 )
 
-    score = _evaluate_resume(resume_data, github_data)
+    # Recover embedded hyperlinks (PR/MR links) that section extraction drops
+    pdf_links = extract_pdf_hyperlinks(pdf_path)
+    if pdf_links:
+        print(f"🔗 Recovered {len(pdf_links)} embedded link(s) from the PDF")
+
+    score = _evaluate_resume(resume_data, github_data, pdf_links=pdf_links)
 
     # Get candidate name for display
     candidate_name = os.path.basename(pdf_path).replace(".pdf", "")

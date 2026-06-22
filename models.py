@@ -8,6 +8,8 @@ class ModelProvider(Enum):
 
     OLLAMA = "ollama"
     GEMINI = "gemini"
+    OPENAI = "openai"
+    OPENROUTER = "openrouter"
 
 
 @runtime_checkable
@@ -241,12 +243,37 @@ class Deductions(BaseModel):
     reasons: str = Field(description="Reasons for deductions")
 
 
+class ImprovementTip(BaseModel):
+    """An actionable way to raise the score, including points likely left on the table."""
+
+    area: str = Field(
+        description="What to improve or what was likely missed (e.g. 'Early-stage engineer bonus', 'Open Source evidence')"
+    )
+    suggestion: str = Field(
+        description="Concrete, actionable advice the candidate can apply"
+    )
+    potential_gain: Optional[str] = Field(
+        default=None,
+        description="Rough points this could add, e.g. '+2-3 bonus' or '+5 open_source'",
+    )
+
+
 class EvaluationData(BaseModel):
     scores: Scores
     bonus_points: BonusPoints
     deductions: Deductions
     key_strengths: List[str] = Field(min_items=1, max_items=5)
     areas_for_improvement: List[str] = Field(min_items=1, max_items=5)
+    score_improvement_tips: List[ImprovementTip] = Field(
+        default_factory=list,
+        max_items=8,
+        description=(
+            "Actionable tips to increase the score, including points likely left "
+            "on the table that the resume did not make explicit — e.g. unclaimed "
+            "bonuses such as early-stage engineer / first 10-20 employees, small "
+            "team / startup founder or co-founder, GSoC, portfolio, or technical blogs."
+        ),
+    )
 
 
 class GitHubProfile(BaseModel):
@@ -351,3 +378,75 @@ class GeminiProvider:
 
         # Convert Gemini response to Ollama-like format for compatibility
         return {"message": {"role": "assistant", "content": response.text}}
+
+
+class OpenAIProvider:
+    """OpenAI API provider implementation."""
+
+    def __init__(self, api_key: str, base_url: str = None):
+        from openai import OpenAI
+
+        if base_url:
+            self.client = OpenAI(api_key=api_key, base_url=base_url)
+        else:
+            self.client = OpenAI(api_key=api_key)
+
+    def chat(
+        self,
+        model: str,
+        messages: List[Dict[str, str]],
+        options: Dict[str, Any] = None,
+        **kwargs
+    ) -> Dict[str, Any]:
+        """Send a chat request to the OpenAI Chat Completions API.
+
+        Returns an Ollama-like dict ({"message": {"role", "content"}}) so the
+        rest of the pipeline stays provider-agnostic.
+        """
+        options = options or {}
+
+        params: Dict[str, Any] = {
+            "model": model,
+            "messages": list(messages),
+        }
+
+        # Sampling parameters (omitted for models that reject them is handled
+        # by the caller's model choice; gpt-4o-family accepts both).
+        if "temperature" in options:
+            params["temperature"] = options["temperature"]
+        if "top_p" in options:
+            params["top_p"] = options["top_p"]
+
+        # Structured output. The downstream code validates against Pydantic
+        # models itself, so JSON mode (guaranteed-valid JSON) is the robust
+        # choice and avoids brittle strict-schema rejections.
+        if kwargs.get("format") is not None:
+            params["response_format"] = {"type": "json_object"}
+            # JSON mode requires the literal word "json" somewhere in the
+            # conversation; add a nudge if a template ever omits it.
+            has_json = any(
+                "json" in (m.get("content") or "").lower() for m in params["messages"]
+            )
+            if not has_json:
+                params["messages"] = params["messages"] + [
+                    {"role": "system", "content": "Respond with valid JSON only."}
+                ]
+
+        response = self.client.chat.completions.create(**params)
+        content = response.choices[0].message.content or ""
+
+        return {"message": {"role": "assistant", "content": content}}
+
+
+class OpenRouterProvider(OpenAIProvider):
+    """OpenRouter provider — OpenAI-compatible API, single key for many models.
+
+    Use any OpenRouter model id as DEFAULT_MODEL (e.g. ``openai/gpt-4o``,
+    ``anthropic/claude-3.7-sonnet``, ``google/gemini-2.5-pro``,
+    ``deepseek/deepseek-chat``).
+    """
+
+    def __init__(
+        self, api_key: str, base_url: str = "https://openrouter.ai/api/v1"
+    ):
+        super().__init__(api_key=api_key, base_url=base_url)

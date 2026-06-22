@@ -4,8 +4,20 @@ Utility functions for LLM providers.
 
 import logging
 from typing import Any, Dict, Optional
-from models import ModelProvider, OllamaProvider, GeminiProvider
-from prompt import MODEL_PROVIDER_MAPPING, GEMINI_API_KEY
+from models import (
+    ModelProvider,
+    OllamaProvider,
+    GeminiProvider,
+    OpenAIProvider,
+    OpenRouterProvider,
+)
+from prompt import (
+    MODEL_PROVIDER_MAPPING,
+    GEMINI_API_KEY,
+    OPENAI_API_KEY,
+    OPENROUTER_API_KEY,
+    PROVIDER,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -47,16 +59,36 @@ def initialize_llm_provider(model_name: str) -> Any:
     Returns:
         An initialized LLM provider (either OllamaProvider or GeminiProvider)
     """
-    # Default to Ollama provider
-    provider = OllamaProvider()
-    # If using Gemini and API key is available, use Gemini provider
-    model_provider = MODEL_PROVIDER_MAPPING.get(model_name, ModelProvider.OLLAMA)
+    # Resolve provider: explicit per-model mapping wins; otherwise fall back to
+    # the provider configured via the LLM_PROVIDER env var (so custom model
+    # names route correctly), and finally to Ollama.
+    model_provider = MODEL_PROVIDER_MAPPING.get(model_name)
+    if model_provider is None:
+        try:
+            model_provider = ModelProvider(PROVIDER)
+        except ValueError:
+            model_provider = ModelProvider.OLLAMA
+
+    if model_provider == ModelProvider.OPENAI:
+        if not OPENAI_API_KEY:
+            logger.warning("⚠️ OpenAI API key not found. Falling back to Ollama.")
+            return OllamaProvider()
+        logger.info(f"🔄 Using OpenAI API provider with model {model_name}")
+        return OpenAIProvider(api_key=OPENAI_API_KEY)
+
+    if model_provider == ModelProvider.OPENROUTER:
+        if not OPENROUTER_API_KEY:
+            logger.warning("⚠️ OpenRouter API key not found. Falling back to Ollama.")
+            return OllamaProvider()
+        logger.info(f"🔄 Using OpenRouter API provider with model {model_name}")
+        return OpenRouterProvider(api_key=OPENROUTER_API_KEY)
+
     if model_provider == ModelProvider.GEMINI:
         if not GEMINI_API_KEY:
             logger.warning("⚠️ Gemini API key not found. Falling back to Ollama.")
-        else:
-            logger.info(f"🔄 Using Google Gemini API provider with model {model_name}")
-            provider = GeminiProvider(api_key=GEMINI_API_KEY)
-    else:
-        logger.info(f"🔄 Using Ollama provider with model {model_name}")
-    return provider
+            return OllamaProvider()
+        logger.info(f"🔄 Using Google Gemini API provider with model {model_name}")
+        return GeminiProvider(api_key=GEMINI_API_KEY)
+
+    logger.info(f"🔄 Using Ollama provider with model {model_name}")
+    return OllamaProvider()

@@ -138,10 +138,12 @@ $ cp .env.example .env
 
 | Variable         | Values                                      | Description                                                            |
 | ---------------- | ------------------------------------------- | ---------------------------------------------------------------------- |
-| `LLM_PROVIDER`   | `ollama` or `gemini`                        | Chooses provider. Defaults to Ollama.                                  |
-| `DEFAULT_MODEL`  | for example `gemma3:4b` or `gemini-2.5-pro` | Model name passed to the provider.                                     |
-| `GEMINI_API_KEY` | string                                      | Required when `LLM_PROVIDER=gemini`.                                   |
-| `GITHUB_TOKEN`   | optional                                    | Inherits from your shell environment, improves GitHub API rate limits. |
+| `LLM_PROVIDER`       | `ollama`, `gemini`, `openai`, or `openrouter`                | Chooses provider. Defaults to Ollama.                                  |
+| `DEFAULT_MODEL`      | e.g. `gemma3:4b`, `gemini-2.5-pro`, `gpt-4o`, `openai/gpt-4o` | Model name passed to the provider.                                    |
+| `GEMINI_API_KEY`     | string                                                       | Required when `LLM_PROVIDER=gemini`.                                   |
+| `OPENAI_API_KEY`     | string                                                       | Required when `LLM_PROVIDER=openai`.                                   |
+| `OPENROUTER_API_KEY` | string                                                       | Required when `LLM_PROVIDER=openrouter`.                              |
+| `GITHUB_TOKEN`       | optional                                                     | Inherits from your shell environment, improves GitHub API rate limits. |
 
 Provider mapping lives in `prompt.py` and `models.py`. The `config.py` file has a single flag:
 
@@ -265,6 +267,31 @@ What happens:
 - Set `DEFAULT_MODEL` to a supported Gemini model, for example `gemini-2.0-flash`
 - Provide `GEMINI_API_KEY`
 - The wrapper in `models.GeminiProvider` adapts responses to a unified format
+
+### OpenAI
+
+- Set `LLM_PROVIDER=openai`
+- Set `DEFAULT_MODEL` to an OpenAI model, for example `gpt-4o`
+- Provide `OPENAI_API_KEY`
+- The wrapper in `models.OpenAIProvider` calls the Chat Completions API and uses JSON mode for structured output
+
+### OpenRouter
+
+- Set `LLM_PROVIDER=openrouter`
+- Set `DEFAULT_MODEL` to any OpenRouter model id, for example `openai/gpt-4o` or `anthropic/claude-3.7-sonnet`
+- Provide `OPENROUTER_API_KEY`
+- `models.OpenRouterProvider` reuses the OpenAI-compatible client against `https://openrouter.ai/api/v1`
+
+---
+
+## This fork
+
+This fork adds a few improvements on top of upstream:
+
+- **More providers** — OpenAI and OpenRouter, in addition to Ollama and Gemini.
+- **Embedded-link recovery** — `score.extract_pdf_hyperlinks` recovers PR/MR and other hyperlinks embedded in the resume PDF that section extraction would otherwise drop, so open source contributions are scored on real evidence.
+- **Fairer rubric** — projects that structurally cannot have a hosted live demo (systems / CLI / library / embedded / low-level code) are no longer penalized for lacking one.
+- **Actionable feedback** — the evaluation returns `score_improvement_tips`: concrete ways to raise the score, including points likely left on the table (e.g. unclaimed early-stage-engineer / startup bonuses).
 
 ---
 
