@@ -1,6 +1,21 @@
-You are evaluating a resume for a Software Intern position at HackerRank. Analyze the resume data and provide scores based on these criteria:
+{% set w = weights | default({'open_source': 35, 'self_projects': 30, 'production': 25, 'technical_skills': 10}) %}
+{% set rg = role_guidance | default({}) %}
+{% set role = role_label | default('Software Engineer') %}
+You are evaluating a resume for a **{{ role }}** role. Analyze the resume data and score it against the criteria below, CALIBRATED FOR THIS ROLE.
 
 **MANDATORY: You MUST always fill ALL FOUR categories: open_source, self_projects, production, technical_skills.**
+
+## TARGET ROLE & WEIGHTING (role-aware scoring)
+This candidate is being evaluated for: **{{ role }}**.
+{% if role_focus %}What matters most for this role: {{ role_focus }}.{% endif %}
+
+The four categories are weighted FOR THIS ROLE as follows (they sum to 100). Use each value below as that category's MAXIMUM — these override any other point numbers mentioned later in this prompt:
+- open_source: max {{ w.open_source }}{% if rg.open_source %} — {{ rg.open_source }}{% endif %}
+- self_projects: max {{ w.self_projects }}{% if rg.self_projects %} — {{ rg.self_projects }}{% endif %}
+- production: max {{ w.production }}{% if rg.production %} — {{ rg.production }}{% endif %}
+- technical_skills: max {{ w.technical_skills }}{% if rg.technical_skills %} — {{ rg.technical_skills }}{% endif %}
+
+The scoring bands described below were written for a software-engineering default (open_source 35 / self_projects 30 / production 25 / technical_skills 10). SCALE every band proportionally to THIS role's maximum for each category. Do NOT penalize a candidate for lacking signals that are not central to this role (e.g. open source for a data role) beyond that category's already-reduced weight.
 
 ## CRITICAL FAIRNESS REQUIREMENTS
 **SCORES MUST NEVER DEPEND ON:**
@@ -32,8 +47,9 @@ You are evaluating a resume for a Software Intern position at HackerRank. Analyz
 
 ## SCORING CRITERIA
 
-### Open Source (0-35 points)
-**HIGH SCORES (25-35 points):**
+### Open Source (0-{{ w.open_source }} points)
+{% if rg.open_source %}For a {{ role }}: {{ rg.open_source }}{% endif %}
+**HIGH SCORES (top of the 0-{{ w.open_source }} range):**
 - Contributions to popular open source projects (1000+ stars)
 - Significant contributions to well-known projects
 - Google Summer of Code (GSoC) participation
@@ -58,11 +74,12 @@ You are evaluating a resume for a Software Intern position at HackerRank. Analyz
 **CRITICAL RULES:**
 - Having personal GitHub repositories does NOT constitute open source contribution
 - True open source contribution means contributing to OTHER people's projects
-- When GitHub data shows all projects are 'self_project' type, open source score MUST be 10 points or less
+- When GitHub data shows all projects are 'self_project' type, the open source score MUST stay low — at most roughly the bottom third of this role's open_source max ({{ w.open_source }}).
 - When a `=== VERIFIED OPEN SOURCE CONTRIBUTIONS ===` section is present, base the open source score on the SUBSTANCE and QUALITY of those verified contributions, not on links or mentions alone. One significant, merged, candidate-authored PR to a popular project is strong evidence; a pile of trivial PRs is weak.
 
-### Self Projects (0-30 points)
-**HIGH SCORES (20-30 points):**
+### Self Projects (0-{{ w.self_projects }} points)
+{% if rg.self_projects %}For a {{ role }}: {{ rg.self_projects }}{% endif %}
+**HIGH SCORES (top of the 0-{{ w.self_projects }} range):**
 - Complex projects with real-world impact
 - Advanced architecture, multiple technologies
 - User adoption or contributions to popular open source projects
@@ -93,11 +110,13 @@ You are evaluating a resume for a Software Intern position at HackerRank. Analyz
 - Apply the LIVE DEMO BONUS / penalty ONLY to projects where a hosted demo is genuinely feasible (web apps, mobile apps, hosted APIs, dashboards, browser extensions, games).
 - When unsure whether a live demo is feasible, ASSUME IT IS NOT and do not penalize.
 
-### Production (0-25 points)
+### Production (0-{{ w.production }} points)
+{% if rg.production %}For a {{ role }}: {{ rg.production }}{% endif %}
 - Analyze the 'work' and 'volunteer' sections for real-world, internship, or production experience
 - **SPECIAL CONSIDERATION**: Give extra points for founder roles, co-founder positions, or early-stage engineer roles (first 10-20 employees) at startups
 
-### Technical Skills (0-10 points)
+### Technical Skills (0-{{ w.technical_skills }} points)
+{% if rg.technical_skills %}For a {{ role }}: {{ rg.technical_skills }}{% endif %}
 - Analyze the 'skills', 'languages', and evidence of technical breadth or problem-solving in projects, work, or competitions
 
 ## PROJECT COMPLEXITY ASSESSMENT
@@ -148,9 +167,9 @@ You are evaluating a resume for a Software Intern position at HackerRank. Analyz
 - -1 to -2 points for each project with broken or inactive links
 
 **CRITICAL ENFORCEMENT:**
-- When GitHub data shows all projects are 'self_project' type, apply 3-5 point deductions for lack of true open source contributions
-- For candidates with only personal GitHub repositories, open source score should NEVER exceed 10 points
-- For candidates with only tutorial-based projects, self_projects score should NEVER exceed 15 points
+- When GitHub data shows all projects are 'self_project' type, apply deductions for lack of true open source contributions ONLY if open source is meaningfully weighted for this role (scale to the open_source max of {{ w.open_source }}; do not heavily penalize roles where it is a minor category).
+- For candidates with only personal GitHub repositories, the open source score should stay in the lower portion of its max ({{ w.open_source }}).
+- For candidates with only tutorial-based projects, the self_projects score should not exceed about half of its max ({{ w.self_projects }}).
 
 ## SCORE IMPROVEMENT GUIDANCE (fill `score_improvement_tips`)
 Beyond scoring, help the candidate improve. Populate `score_improvement_tips` with specific, actionable items — especially POINTS LIKELY LEFT ON THE TABLE that the resume did not make explicit. Actively hunt for:
@@ -176,10 +195,10 @@ Beyond scoring, help the candidate improve. Populate `score_improvement_tips` wi
 - Evidence fields cannot be empty string
 - All category scores must be >= 0 (cannot be negative)
 - **CATEGORY SCORE LIMITS** (CANNOT be exceeded under any circumstances):
-  - open_source: 0-35 points (maximum 35)
-  - self_projects: 0-30 points (maximum 30)
-  - production: 0-25 points (maximum 25)
-  - technical_skills: 0-10 points (maximum 10)
+  - open_source: 0-{{ w.open_source }} points (maximum {{ w.open_source }})
+  - self_projects: 0-{{ w.self_projects }} points (maximum {{ w.self_projects }})
+  - production: 0-{{ w.production }} points (maximum {{ w.production }})
+  - technical_skills: 0-{{ w.technical_skills }} points (maximum {{ w.technical_skills }})
 - Bonus points total must be <= 20 (maximum 20 points)
 - **OVERALL SCORE LIMIT**: The total score (categories + bonus - deductions) cannot exceed 120 points
 
@@ -189,10 +208,10 @@ Analyze the following resume and provide a JSON response with this EXACT structu
 
 {
     "scores": {
-        "open_source": {"score": 0, "max": 35, "evidence": "string"},
-        "self_projects": {"score": 0, "max": 30, "evidence": "string"},
-        "production": {"score": 0, "max": 25, "evidence": "string"},
-        "technical_skills": {"score": 0, "max": 10, "evidence": "string"}
+        "open_source": {"score": 0, "max": {{ w.open_source }}, "evidence": "string"},
+        "self_projects": {"score": 0, "max": {{ w.self_projects }}, "evidence": "string"},
+        "production": {"score": 0, "max": {{ w.production }}, "evidence": "string"},
+        "technical_skills": {"score": 0, "max": {{ w.technical_skills }}, "evidence": "string"}
     },
     "bonus_points": {"total": 0, "breakdown": "string"},
     "deductions": {"total": 0, "reasons": "string"},

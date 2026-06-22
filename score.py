@@ -17,6 +17,7 @@ from transform import (
     convert_blog_data_to_text,
 )
 from config import DEVELOPMENT_MODE
+from roles import get_role_profile, resolve_role_key, list_roles
 from mr_review import (
     review_resume_contributions,
     format_contributions_for_eval,
@@ -68,11 +69,16 @@ logging.basicConfig(
 
 
 def print_evaluation_results(
-    evaluation: EvaluationData, candidate_name: str = "Candidate"
+    evaluation: EvaluationData,
+    candidate_name: str = "Candidate",
+    role_profile: dict = None,
 ):
     """Print evaluation results in a readable format."""
+    role_profile = role_profile or {}
     print("\n" + "=" * 80)
     print(f"📊 RESUME EVALUATION RESULTS FOR: {candidate_name}")
+    if role_profile.get("label"):
+        print(f"🎯 Scored as: {role_profile['label']}")
     print("=" * 80)
 
     if not evaluation:
@@ -117,13 +123,16 @@ def print_evaluation_results(
     print("-" * 60)
 
     if hasattr(evaluation, "scores") and evaluation.scores:
-        # Define category maximums
-        category_maxes = {
-            "open_source": 35,
-            "self_projects": 30,
-            "production": 25,
-            "technical_skills": 10,
-        }
+        # Category maximums for this role (fall back to the SWE defaults)
+        category_maxes = role_profile.get(
+            "weights",
+            {
+                "open_source": 35,
+                "self_projects": 30,
+                "production": 25,
+                "technical_skills": 10,
+            },
+        )
 
         # Open Source
         if hasattr(evaluation.scores, "open_source") and evaluation.scores.open_source:
@@ -237,11 +246,16 @@ def _evaluate_resume(
     pdf_links: List[Dict[str, str]] = None,
     contributions_text: str = "",
     projects_text: str = "",
+    role_profile: dict = None,
 ) -> Optional[EvaluationData]:
     """Evaluate the resume using AI and display results."""
 
     model_params = MODEL_PARAMETERS.get(DEFAULT_MODEL)
-    evaluator = ResumeEvaluator(model_name=DEFAULT_MODEL, model_params=model_params)
+    evaluator = ResumeEvaluator(
+        model_name=DEFAULT_MODEL,
+        model_params=model_params,
+        role_profile=role_profile,
+    )
 
     # Convert JSON resume data to text
     resume_text = convert_json_resume_to_text(resume_data)
@@ -298,7 +312,7 @@ def find_profile(profiles, network):
     )
 
 
-def main(pdf_path):
+def main(pdf_path, role=None):
     # Create cache filename based on PDF path
     cache_filename = (
         f"cache/resumecache_{os.path.basename(pdf_path).replace('.pdf', '')}.json"
@@ -438,12 +452,18 @@ def main(pdf_path):
     if projects_report:
         print(projects_report)
 
+    # Score against the role the caller chose (no auto-detection). Unknown/None
+    # falls back to the software-engineering default profile.
+    role_profile = get_role_profile(role)
+    print(f"🎯 Target role: {role_profile['label']}")
+
     score = _evaluate_resume(
         resume_data,
         github_data,
         pdf_links=pdf_links,
         contributions_text=format_contributions_for_eval(contributions),
         projects_text=format_projects_for_eval(projects),
+        role_profile=role_profile,
     )
 
     # Get candidate name for display
@@ -457,7 +477,7 @@ def main(pdf_path):
         candidate_name = resume_data.basics.name
 
     # Print evaluation results in readable format
-    print_evaluation_results(score, candidate_name)
+    print_evaluation_results(score, candidate_name, role_profile=role_profile)
 
     if DEVELOPMENT_MODE:
         csv_row = transform_evaluation_response(
@@ -485,14 +505,49 @@ def main(pdf_path):
     return score
 
 
+def _usage():
+    print("Usage: python score.py <pdf_path> --role <role>")
+    print(f"       roles: {', '.join(list_roles())}")
+
+
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
-        print("Usage: python score.py <pdf_path>")
+    # Minimal arg parsing: positional pdf_path plus required --role <value>.
+    role = None
+    positional = []
+    args = sys.argv[1:]
+    i = 0
+    while i < len(args):
+        arg = args[i]
+        if arg in ("--role", "-r"):
+            if i + 1 >= len(args):
+                print("Error: --role requires a value")
+                exit(1)
+            role = args[i + 1]
+            i += 2
+        elif arg.startswith("--role="):
+            role = arg.split("=", 1)[1]
+            i += 1
+        else:
+            positional.append(arg)
+            i += 1
+
+    if not positional:
+        _usage()
         exit(1)
-    pdf_path = sys.argv[1]
+    pdf_path = positional[0]
 
     if not os.path.exists(pdf_path):
         print(f"Error: File '{pdf_path}' does not exist.")
         exit(1)
 
-    main(pdf_path)
+    if not role:
+        print("Error: --role is required (the user must choose the target role).")
+        _usage()
+        exit(1)
+
+    role_key = resolve_role_key(role)
+    if not role_key:
+        print(f"Error: unknown role '{role}'. Choose one of: {', '.join(list_roles())}")
+        exit(1)
+
+    main(pdf_path, role=role_key)
