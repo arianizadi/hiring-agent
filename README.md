@@ -282,6 +282,10 @@ What happens:
 - Provide `OPENROUTER_API_KEY`
 - `models.OpenRouterProvider` reuses the OpenAI-compatible client against `https://openrouter.ai/api/v1`
 
+### Choosing a model
+
+For honest, non-sycophantic evaluations you want a model that pushes back on weak or unsupported claims rather than rubber-stamping them. [BullshitBench](https://petergpt.github.io/bullshit-benchmark/viewer/index.v2.html) measures exactly that — each model's "clear pushback" rate on nonsense prompts. The leaderboard changes frequently, so **check it live for the current best performers** rather than trusting any hardcoded list, then set `DEFAULT_MODEL` accordingly. With `LLM_PROVIDER=openrouter` you can point at whichever model currently tops the bench without changing code.
+
 ---
 
 ## This fork

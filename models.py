@@ -383,6 +383,11 @@ class GeminiProvider:
 class OpenAIProvider:
     """OpenAI API provider implementation."""
 
+    # Whether to send OpenAI's response_format={"type": "json_object"} flag.
+    # Native OpenAI supports it; aggregators routing to other vendors may not,
+    # so subclasses can disable it and rely on prompt-driven JSON instead.
+    supports_json_mode = True
+
     def __init__(self, api_key: str, base_url: str = None):
         from openai import OpenAI
 
@@ -419,11 +424,14 @@ class OpenAIProvider:
 
         # Structured output. The downstream code validates against Pydantic
         # models itself, so JSON mode (guaranteed-valid JSON) is the robust
-        # choice and avoids brittle strict-schema rejections.
+        # choice and avoids brittle strict-schema rejections. When json_object
+        # mode is unsupported (e.g. aggregators routing to non-OpenAI vendors),
+        # fall back to prompt-driven JSON, which the pipeline already parses.
         if kwargs.get("format") is not None:
-            params["response_format"] = {"type": "json_object"}
-            # JSON mode requires the literal word "json" somewhere in the
-            # conversation; add a nudge if a template ever omits it.
+            if self.supports_json_mode:
+                params["response_format"] = {"type": "json_object"}
+            # Ensure the literal word "json" is present (required by json mode,
+            # and a reliable nudge for prompt-only providers).
             has_json = any(
                 "json" in (m.get("content") or "").lower() for m in params["messages"]
             )
@@ -445,6 +453,10 @@ class OpenRouterProvider(OpenAIProvider):
     ``anthropic/claude-3.7-sonnet``, ``google/gemini-2.5-pro``,
     ``deepseek/deepseek-chat``).
     """
+
+    # OpenRouter routes to many vendors; not all accept OpenAI's json_object
+    # flag, so rely on prompt-driven JSON (the pipeline parses it either way).
+    supports_json_mode = False
 
     def __init__(
         self, api_key: str, base_url: str = "https://openrouter.ai/api/v1"
