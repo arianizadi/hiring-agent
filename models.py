@@ -276,6 +276,46 @@ class EvaluationData(BaseModel):
     )
 
 
+class MRReview(BaseModel):
+    """LLM assessment of one open source contribution (PR/MR) fetched from its diff."""
+
+    substance: str = Field(
+        description="How meaningful the change is: trivial | minor | moderate | significant"
+    )
+    quality: str = Field(
+        description="Code quality of the change: poor | mixed | solid | excellent"
+    )
+    summary: str = Field(
+        min_length=1, description="What the change actually does, in 1-2 sentences"
+    )
+    concerns: Optional[str] = Field(
+        default=None,
+        description="Red flags (e.g. trivial change, not authored by the candidate), or empty",
+    )
+
+
+class ProjectCodeReview(BaseModel):
+    """LLM assessment of a candidate's personal project, reviewed from its repo code."""
+
+    complexity: str = Field(
+        description="Technical complexity of the project: trivial | basic | moderate | advanced"
+    )
+    quality: str = Field(
+        description="Code quality and craftsmanship: poor | mixed | solid | excellent"
+    )
+    summary: str = Field(
+        min_length=1,
+        description="What the project is and how it is built, in 1-3 sentences",
+    )
+    strengths: Optional[str] = Field(
+        default=None, description="Notable engineering strengths, or empty"
+    )
+    concerns: Optional[str] = Field(
+        default=None,
+        description="Red flags (tutorial copy, boilerplate-only, empty/abandoned), or empty",
+    )
+
+
 class GitHubProfile(BaseModel):
     """Pydantic model for GitHub profile data."""
 

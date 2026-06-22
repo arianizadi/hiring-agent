@@ -17,6 +17,16 @@ from transform import (
     convert_blog_data_to_text,
 )
 from config import DEVELOPMENT_MODE
+from mr_review import (
+    review_resume_contributions,
+    format_contributions_for_eval,
+    format_contributions_for_report,
+)
+from project_review import (
+    review_personal_projects,
+    format_projects_for_eval,
+    format_projects_for_report,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -225,6 +235,8 @@ def _evaluate_resume(
     github_data: dict = None,
     blog_data: dict = None,
     pdf_links: List[Dict[str, str]] = None,
+    contributions_text: str = "",
+    projects_text: str = "",
 ) -> Optional[EvaluationData]:
     """Evaluate the resume using AI and display results."""
 
@@ -236,6 +248,14 @@ def _evaluate_resume(
 
     # Add embedded PDF hyperlinks (recovers PR/MR links dropped during extraction)
     resume_text += _format_embedded_links(pdf_links)
+
+    # Add verified open source contributions reviewed from actual PR diffs
+    if contributions_text:
+        resume_text += contributions_text
+
+    # Add verified personal projects reviewed from actual repository code
+    if projects_text:
+        resume_text += projects_text
 
     # Add GitHub data if available
     if github_data:
@@ -395,7 +415,36 @@ def main(pdf_path):
     if pdf_links:
         print(f"🔗 Recovered {len(pdf_links)} embedded link(s) from the PDF")
 
-    score = _evaluate_resume(resume_data, github_data, pdf_links=pdf_links)
+    # Determine the candidate's GitHub username (for PR authorship verification)
+    candidate_username = ""
+    if isinstance(github_data, dict):
+        candidate_username = (github_data.get("profile") or {}).get("username") or ""
+    if not candidate_username and resume_data and resume_data.basics:
+        gh_profile = find_profile(resume_data.basics.profiles, "Github")
+        if gh_profile:
+            from github import extract_github_username
+
+            candidate_username = extract_github_username(gh_profile.url) or ""
+
+    # Fetch and review the actual code of any PR/MR links found in the resume
+    contributions = review_resume_contributions(pdf_links, candidate_username)
+    contributions_report = format_contributions_for_report(contributions)
+    if contributions_report:
+        print(contributions_report)
+
+    # Review the candidate's own project repos from their actual code (Gitingest)
+    projects = review_personal_projects(pdf_links, candidate_username)
+    projects_report = format_projects_for_report(projects)
+    if projects_report:
+        print(projects_report)
+
+    score = _evaluate_resume(
+        resume_data,
+        github_data,
+        pdf_links=pdf_links,
+        contributions_text=format_contributions_for_eval(contributions),
+        projects_text=format_projects_for_eval(projects),
+    )
 
     # Get candidate name for display
     candidate_name = os.path.basename(pdf_path).replace(".pdf", "")
